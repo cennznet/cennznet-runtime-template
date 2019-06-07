@@ -1,0 +1,84 @@
+[build-dependencies]
+vergen = '3'
+
+[dependencies]
+error-chain = '0.12'
+exit-future = '0.1'
+futures = '0.1'
+hex-literal = '0.1'
+log = '0.4'
+parity-codec = '3.2'
+parking_lot = '0.7.1'
+tokio = '0.1'
+trie-root = '0.12.0'
+
+[dependencies.basic-authorship]
+git = 'https://github.com/cennznet/plug-blockchain.git'
+package = 'substrate-basic-authorship'
+branch = 'stable'
+
+[dependencies.consensus]
+git = 'https://github.com/cennznet/plug-blockchain.git'
+package = 'substrate-consensus-aura'
+branch = 'stable'
+
+[dependencies.ctrlc]
+features = ['termination']
+version = '3.0'
+
+[dependencies.inherents]
+git = 'https://github.com/cennznet/plug-blockchain.git'
+package = 'substrate-inherents'
+branch = 'stable'
+
+[dependencies.network]
+git = 'https://github.com/cennznet/plug-blockchain.git'
+package = 'substrate-network'
+branch = 'stable'
+
+[dependencies.cennznet-runtime-template-runtime]
+path = 'runtime'
+
+[dependencies.primitives]
+git = 'https://github.com/cennznet/plug-blockchain.git'
+package = 'substrate-primitives'
+branch = 'stable'
+
+[dependencies.sr-io]
+git = 'https://github.com/cennznet/plug-blockchain.git'
+branch = 'stable'
+
+[dependencies.substrate-cli]
+git = 'https://github.com/cennznet/plug-blockchain.git'
+branch = 'stable'
+
+[dependencies.substrate-client]
+git = 'https://github.com/cennznet/plug-blockchain.git'
+branch = 'stable'
+
+[dependencies.substrate-executor]
+git = 'https://github.com/cennznet/plug-blockchain.git'
+branch = 'stable'
+
+[dependencies.substrate-service]
+git = 'https://github.com/cennznet/plug-blockchain.git'
+branch = 'stable'
+
+[dependencies.transaction-pool]
+git = 'https://github.com/cennznet/plug-blockchain.git'
+package = 'substrate-transaction-pool'
+branch = 'stable'
+
+[profile.release]
+panic = 'unwind'
+
+[package]
+authors = ['Centrality Developers <support@centrality.ai>']
+build = 'build.rs'
+edition = '2018'
+name = 'cennznet-runtime-template'
+version = '1.0.0'
+
+[[bin]]
+name = 'cennznet-runtime-template'
+path = 'src/main.rs'

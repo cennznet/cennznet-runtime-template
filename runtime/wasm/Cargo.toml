@@ -1,0 +1,21 @@
+[package]
+authors = ['Centrality Developers <support@centrality.ai>']
+edition = '2018'
+name = 'cennznet-runtime-template-runtime-wasm'
+version = '1.0.0'
+
+[lib]
+crate-type = ['cdylib']
+[dependencies.cennznet-runtime-template-runtime]
+default-features = false
+path = '..'
+
+[features]
+default = []
+std = ['cennznet-runtime-template-runtime/std']
+
+[workspace]
+members = []
+[profile.release]
+lto = true
+panic = 'abort'

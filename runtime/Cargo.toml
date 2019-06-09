@@ -17,7 +17,6 @@ std = [
     'executive/std',
     'aura/std',
     'indices/std',
-    'primitives/std',
     'system/std',
     'timestamp/std',
     'sudo/std',
@@ -28,7 +27,7 @@ std = [
     'consensus-aura/std',
     'offchain-primitives/std',
     'generic-asset/std',
-	  'fees/std',
+    'fees/std',
     'cennzx-spot/std',
     'cennznet-primitives/std'
 ]

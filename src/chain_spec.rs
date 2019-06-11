@@ -46,7 +46,14 @@ impl Alternative {
                 || {
                     testnet_genesis(
                         vec![authority_key("Alice")],
-                        vec![account_key("Alice")],
+                        vec![
+                            account_key("Alice"),
+                            account_key("Bob"),
+                            account_key("Charlie"),
+                            account_key("Dave"),
+                            account_key("Eve"),
+                            account_key("Ferdie"),
+                        ],
                         account_key("Alice"),
                     )
                 },
@@ -103,7 +110,7 @@ fn testnet_genesis(
 		}),
 		system: None,
 		timestamp: Some(TimestampConfig {
-			minimum_period: 5, // 10 second block time.
+			minimum_period: 3, // 6 second block time.
 		}),
 		indices: Some(IndicesConfig {
 			ids: endowed_accounts.clone(),

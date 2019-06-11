@@ -109,13 +109,13 @@ fn testnet_genesis(
 			ids: endowed_accounts.clone(),
 		}),
 		generic_asset: Some(GenericAssetConfig {
-			assets: vec![0, 1],
+			assets: vec![16000, 16001],
 			initial_balance: 10u128.pow(10),
 			endowed_accounts: endowed_accounts.clone().into_iter().map(Into::into).collect(),
-			next_asset_id: 1000,
+			next_asset_id: 17000,
 			create_asset_stake: 0,
-			staking_asset_id: 1,
-			spending_asset_id: 0,
+			staking_asset_id: 16000,
+			spending_asset_id: 16001,
 		}),
 		fees: Some(FeesConfig {
 			_genesis_phantom_data: Default::default(),
@@ -127,7 +127,7 @@ fn testnet_genesis(
 		}),
 		cennzx_spot: Some(CennzxSpotConfig {
 			fee_rate: FeeRate::from_milli(3),
-			core_asset_id: 0,
+			core_asset_id: 16001,
 		}),
 		sudo: Some(SudoConfig {
 			key: root_key,

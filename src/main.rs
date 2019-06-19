@@ -14,7 +14,7 @@ fn run() -> cli::error::Result<()> {
         name: "CENNZnet Runtime Template Node",
         commit: env!("VERGEN_SHA_SHORT"),
         version: env!("CARGO_PKG_VERSION"),
-        executable_name: "cennznet-runtime-tempalte",
+        executable_name: "cennznet-runtime-template",
         author: "Centrality Developers",
         description: "CENNZnet Runtime Template",
         support_url: "https://github.com/cennznet/cennznet-runtime-template/issues",

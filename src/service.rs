@@ -25,7 +25,7 @@ native_executor_instance!(
 	pub Executor,
 	cennznet_runtime_template_runtime::api::dispatch,
 	cennznet_runtime_template_runtime::native_version,
-	include_bytes!("../runtime/wasm/target/wasm32-unknown-unknown/release/cennznet_runtime_template_runtime_wasm.compact.wasm")
+	include_bytes!("../runtime/wasm/target/wasm32-unknown-unknown/release/cennznet_runtime_template.compact.wasm")
 );
 
 #[derive(Default)]

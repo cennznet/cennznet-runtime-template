@@ -1,6 +1,7 @@
 use cennznet_runtime_template_runtime::{
-    fees, generic_asset, AccountId, CennzxSpotConfig, ConsensusConfig, Fee, FeeRate, FeesConfig,
-    GenericAssetConfig, GenesisConfig, IndicesConfig, SudoConfig, TimestampConfig,
+    fees, generic_asset, AccountId, CennzxSpotConfig, ConsensusConfig, ContractConfig, Fee,
+    FeeRate, FeesConfig, GenericAssetConfig, GenesisConfig, GrandpaConfig, IndicesConfig, Schedule,
+    SessionConfig, StakerStatus, StakingConfig, SudoConfig, TimestampConfig,
 };
 use primitives::{ed25519, sr25519, Pair};
 use substrate_service;
@@ -24,16 +25,27 @@ pub enum Alternative {
     LocalTestnet,
 }
 
-fn authority_key(s: &str) -> AuthorityId {
-    ed25519::Pair::from_string(&format!("//{}", s), None)
+/// Helper function to generate AccountId from seed
+pub fn get_account_id_from_seed(seed: &str) -> AccountId {
+    sr25519::Pair::from_string(&format!("//{}", seed), None)
         .expect("static values are valid; qed")
         .public()
 }
 
-fn account_key(s: &str) -> AccountId {
-    sr25519::Pair::from_string(&format!("//{}", s), None)
+/// Helper function to generate AuthorityId from seed
+pub fn get_session_key_from_seed(seed: &str) -> AuthorityId {
+    ed25519::Pair::from_string(&format!("//{}", seed), None)
         .expect("static values are valid; qed")
         .public()
+}
+
+/// Helper function to generate stash, controller and session key from seed
+pub fn get_authority_keys_from_seed(seed: &str) -> (AccountId, AccountId, AuthorityId) {
+    (
+        get_account_id_from_seed(seed),
+        get_account_id_from_seed(seed),
+        get_session_key_from_seed(seed),
+    )
 }
 
 impl Alternative {
@@ -45,16 +57,17 @@ impl Alternative {
                 "dev",
                 || {
                     testnet_genesis(
-                        vec![authority_key("Alice")],
+                        vec![get_authority_keys_from_seed("Alice")],
                         vec![
-                            account_key("Alice"),
-                            account_key("Bob"),
-                            account_key("Charlie"),
-                            account_key("Dave"),
-                            account_key("Eve"),
-                            account_key("Ferdie"),
+                            get_account_id_from_seed("Alice"),
+                            get_account_id_from_seed("Alice//stash"),
+                            get_account_id_from_seed("Bob"),
+                            get_account_id_from_seed("Charlie"),
+                            get_account_id_from_seed("Dave"),
+                            get_account_id_from_seed("Eve"),
+                            get_account_id_from_seed("Ferdie"),
                         ],
-                        account_key("Alice"),
+                        get_account_id_from_seed("Alice"),
                     )
                 },
                 vec![],
@@ -68,16 +81,21 @@ impl Alternative {
                 "local_testnet",
                 || {
                     testnet_genesis(
-                        vec![authority_key("Alice"), authority_key("Bob")],
                         vec![
-                            account_key("Alice"),
-                            account_key("Bob"),
-                            account_key("Charlie"),
-                            account_key("Dave"),
-                            account_key("Eve"),
-                            account_key("Ferdie"),
+                            get_authority_keys_from_seed("Alice"),
+                            get_authority_keys_from_seed("Bob"),
                         ],
-                        account_key("Alice"),
+                        vec![
+                            get_account_id_from_seed("Alice"),
+                            get_account_id_from_seed("Alice//stash"),
+                            get_account_id_from_seed("Bob"),
+                            get_account_id_from_seed("Bob//stash"),
+                            get_account_id_from_seed("Charlie"),
+                            get_account_id_from_seed("Dave"),
+                            get_account_id_from_seed("Eve"),
+                            get_account_id_from_seed("Ferdie"),
+                        ],
+                        get_account_id_from_seed("Alice"),
                     )
                 },
                 vec![],
@@ -99,14 +117,14 @@ impl Alternative {
 }
 
 fn testnet_genesis(
-    initial_authorities: Vec<AuthorityId>,
+    initial_authorities: Vec<(AccountId, AccountId, AuthorityId)>,
     endowed_accounts: Vec<AccountId>,
     root_key: AccountId,
 ) -> GenesisConfig {
     GenesisConfig {
 		consensus: Some(ConsensusConfig {
-			code: include_bytes!("../runtime/wasm/target/wasm32-unknown-unknown/release/cennznet_runtime_template_runtime_wasm.compact.wasm").to_vec(),
-			authorities: initial_authorities.clone(),
+			code: include_bytes!("../runtime/wasm/target/wasm32-unknown-unknown/release/cennznet_runtime_template.compact.wasm").to_vec(),
+			authorities: initial_authorities.iter().map(|x| x.2.clone()).collect(),
 		}),
 		system: None,
 		timestamp: Some(TimestampConfig {
@@ -114,6 +132,30 @@ fn testnet_genesis(
 		}),
 		indices: Some(IndicesConfig {
 			ids: endowed_accounts.clone(),
+		}),
+        session: Some(SessionConfig {
+			validators: initial_authorities.iter().map(|x| x.1.clone()).collect(),
+			session_length: 10,
+			keys: initial_authorities
+				.iter()
+				.map(|x| (x.1.clone(), x.2.clone()))
+				.collect::<Vec<_>>(),
+		}),
+        staking: Some(StakingConfig {
+			current_era: 0,
+			minimum_validator_count: 1,
+			validator_count: 4,
+			sessions_per_era: 5,
+			bonding_duration: 12,
+			offline_slash: Default::default(),
+			session_reward: Default::default(),
+			current_session_reward: 0,
+			offline_slash_grace: 0,
+			stakers: initial_authorities
+				.iter()
+				.map(|x| (x.0.clone(), x.1.clone(), 1_000_000_000, StakerStatus::Validator))
+				.collect(),
+			invulnerables: initial_authorities.iter().map(|x| x.1.clone()).collect(),
 		}),
 		generic_asset: Some(GenericAssetConfig {
 			assets: vec![16000, 16001],
@@ -138,6 +180,31 @@ fn testnet_genesis(
 		}),
 		sudo: Some(SudoConfig {
 			key: root_key,
+		}),
+    	grandpa: Some(GrandpaConfig {
+			authorities: initial_authorities.iter().map(|x| (x.2.clone(), 1)).collect(),
+		}),
+        contract: Some(ContractConfig {
+			signed_claim_handicap: 2,
+			rent_byte_price: 1,
+			rent_deposit_offset: 1000,
+			storage_size_offset: 8,
+			surcharge_reward: 150,
+			tombstone_deposit: 16,
+			contract_fee: 1,
+			call_base_fee: 1,
+			create_base_fee: 1,
+			creation_fee: 0,
+			transaction_base_fee: 1,
+			transaction_byte_fee: 0,
+			transfer_fee: 1,
+			gas_price: 1,
+			max_depth: 1024,
+			block_gas_limit: 10_000_000_000,
+			current_schedule: Schedule {
+				enable_println: true,
+				..Default::default()
+			},
 		}),
 	}
 }

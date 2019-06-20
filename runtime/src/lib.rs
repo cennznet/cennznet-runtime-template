@@ -11,7 +11,7 @@ pub use cennznet_primitives::{
 };
 
 #[cfg(feature = "std")]
-use serde_derive::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize};
 use parity_codec::{Encode, Decode};
 use rstd::prelude::*;
 #[cfg(feature = "std")]
@@ -19,20 +19,25 @@ use primitives::bytes;
 use primitives::OpaqueMetadata;
 use runtime_primitives::{
 	ApplyResult, transaction_validity::TransactionValidity, generic, create_runtime_str,
-	traits::{self, NumberFor, BlakeTwo256, Block as BlockT, StaticLookup, Checkable}
+	traits::{self, NumberFor, BlakeTwo256, Block as BlockT, StaticLookup, Checkable, DigestFor, AuthorityIdFor, Convert},
 };
+use grandpa::fg_primitives::{self, ScheduledChange};
 use client::{
 	block_builder::api::{CheckInherentsResult, InherentData, self as block_builder_api},
-	runtime_api, impl_runtime_apis
+	runtime_api as client_api, impl_runtime_apis,
 };
 use version::RuntimeVersion;
 #[cfg(feature = "std")]
 use version::NativeVersion;
 
+use generic_asset::{SpendingAssetCurrency, StakingAssetCurrency};
+use support::traits::Currency;
 use support::construct_runtime;
+pub use contract::Schedule;
+pub use staking::StakerStatus;
 
 pub use cennzx_spot::{ExchangeAddressGenerator, FeeRate};
-use generic_asset::SpendingAssetCurrency;
+
 pub use fees;
 pub use generic_asset;
 
@@ -89,6 +94,26 @@ pub fn native_version() -> NativeVersion {
 	NativeVersion {
 		runtime_version: VERSION,
 		can_author_with: Default::default(),
+	}
+}
+
+pub struct CurrencyToVoteHandler;
+
+impl CurrencyToVoteHandler {
+	fn factor() -> u128 {
+		(<StakingAssetCurrency<Runtime>>::total_issuance() / u64::max_value() as u128).max(1)
+	}
+}
+
+impl Convert<u128, u64> for CurrencyToVoteHandler {
+	fn convert(x: u128) -> u64 {
+		(x / Self::factor()) as u64
+	}
+}
+
+impl Convert<u128, u128> for CurrencyToVoteHandler {
+	fn convert(x: u128) -> u128 {
+		x * Self::factor()
 	}
 }
 
@@ -150,6 +175,42 @@ impl timestamp::Trait for Runtime {
 	type OnTimestampSet = Aura;
 }
 
+impl session::Trait for Runtime {
+	type ConvertAccountIdToSessionKey = ();
+	type OnSessionChange = (Staking, grandpa::SyncedAuthorities<Runtime>);
+	type Event = Event;
+}
+
+impl staking::Trait for Runtime {
+	type Currency = StakingAssetCurrency<Self>;
+	type RewardCurrency = SpendingAssetCurrency<Self>;
+	type CurrencyToReward = Balance;
+	type BalanceToU128 = Balance;
+	type U128ToBalance = Balance;
+	type CurrencyToVote = CurrencyToVoteHandler;
+	type OnRewardMinted = ();
+	type Event = Event;
+	type Slash = ();
+	type Reward = ();
+}
+
+impl grandpa::Trait for Runtime {
+	type Log = Log;
+	type SessionKey = AuthorityId;
+	type Event = Event;
+}
+
+impl contract::Trait for Runtime {
+	type Currency = SpendingAssetCurrency<Self>;
+	type Call = Call;
+	type Event = Event;
+	type Gas = u64;
+	type DetermineContractAddress = contract::SimpleAddressDeterminator<Runtime>;
+	type ComputeDispatchFee = contract::DefaultDispatchFeeComputor<Runtime>;
+	type TrieIdGenerator = contract::TrieIdFromParentCounter<Runtime>;
+	type GasPayment = ();
+}
+
 impl sudo::Trait for Runtime {
 	/// The uniquitous event type.
 	type Event = Event;
@@ -192,9 +253,13 @@ construct_runtime!(
 		Consensus: consensus::{Module, Call, Storage, Config<T>, Log(AuthoritiesChange), Inherent},
 		Aura: aura::{Module},
 		Indices: indices,
+		GenericAsset: generic_asset::{Module, Call, Storage, Config<T>, Event<T>, Fee},
+		Session: session,
+		Staking: staking,
+		Grandpa: grandpa::{Module, Call, Storage, Config<T>, Log(), Event<T>},
+		Contract: contract::{Module, Call, Storage, Config<T>, Event<T>},
 		Sudo: sudo,
 		Fees: fees::{Module, Call, Fee, Storage, Config<T>, Event<T>},
-		GenericAsset: generic_asset::{Module, Call, Storage, Config<T>, Event<T>, Fee},
 		CennzxSpot: cennzx_spot::{Module, Call, Storage, Config<T>, Event<T>},
 		// Used for the module template in `./template.rs`
 		TemplateModule: template::{Module, Call, Storage, Event<T>},
@@ -222,7 +287,7 @@ pub type Executive = executive::Executive<Runtime, Block, Context, ExtrinsicFeeP
 
 // Implement our runtime API endpoints. This is just a bunch of proxying.
 impl_runtime_apis! {
-	impl runtime_api::Core<Block> for Runtime {
+	impl client_api::Core<Block> for Runtime {
 		fn version() -> RuntimeVersion {
 			VERSION
 		}
@@ -235,12 +300,12 @@ impl_runtime_apis! {
 			Executive::initialize_block(header)
 		}
 
-		fn authorities() -> Vec<AuthorityId> {
+		fn authorities() -> Vec<AuthorityIdFor<Block>> {
 			panic!("Deprecated, please use `AuthoritiesApi`.")
 		}
 	}
 
-	impl runtime_api::Metadata<Block> for Runtime {
+	impl client_api::Metadata<Block> for Runtime {
 		fn metadata() -> OpaqueMetadata {
 			Runtime::metadata().into()
 		}
@@ -268,9 +333,49 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl runtime_api::TaggedTransactionQueue<Block> for Runtime {
+	impl client_api::TaggedTransactionQueue<Block> for Runtime {
 		fn validate_transaction(tx: <Block as BlockT>::Extrinsic) -> TransactionValidity {
 			Executive::validate_transaction(tx)
+		}
+	}
+
+	impl offchain_primitives::OffchainWorkerApi<Block> for Runtime {
+		fn offchain_worker(number: NumberFor<Block>) {
+			Executive::offchain_worker(number)
+		}
+	}
+
+	impl fg_primitives::GrandpaApi<Block> for Runtime {
+		fn grandpa_pending_change(digest: &DigestFor<Block>)
+			-> Option<ScheduledChange<NumberFor<Block>>>
+		{
+			for log in digest.logs.iter().filter_map(|l| match l {
+				Log(InternalLog::grandpa(grandpa_signal)) => Some(grandpa_signal),
+				_=> None
+			}) {
+				if let Some(change) = Grandpa::scrape_digest_change(log) {
+					return Some(change);
+				}
+			}
+			None
+		}
+
+		fn grandpa_forced_change(digest: &DigestFor<Block>)
+			-> Option<(NumberFor<Block>, ScheduledChange<NumberFor<Block>>)>
+		{
+			for log in digest.logs.iter().filter_map(|l| match l {
+				Log(InternalLog::grandpa(grandpa_signal)) => Some(grandpa_signal),
+				_ => None
+			}) {
+				if let Some(change) = Grandpa::scrape_digest_forced_change(log) {
+					return Some(change);
+				}
+			}
+			None
+		}
+
+		fn grandpa_authorities() -> Vec<(AuthorityId, u64)> {
+			Grandpa::grandpa_authorities()
 		}
 	}
 
@@ -280,14 +385,8 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl offchain_primitives::OffchainWorkerApi<Block> for Runtime {
-		fn offchain_worker(n: NumberFor<Block>) {
-			Executive::offchain_worker(n)
-		}
-	}
-
 	impl consensus_authorities::AuthoritiesApi<Block> for Runtime {
-		fn authorities() -> Vec<AuthorityId> {
+		fn authorities() -> Vec<AuthorityIdFor<Block>> {
 			Consensus::authorities()
 		}
 	}
